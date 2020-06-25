@@ -10,6 +10,33 @@ class Suit(Enum):
     SPADES = 'S'
 
 
+class Ranking(Enum):
+    HIGH_CARD = 1
+    ONE_PAIR = 2
+    TWO_PAIRS = 3
+    THREE_OF_A_KIND = 4
+    STRAIGHT = 5
+    FLUSH = 6
+    FULL_HOUSE = 7
+    FOUR_OF_A_KIND = 8
+    STRAIGHT_FLUSH = 9
+    ROYAL_FLUSH = 10
+
+    def __str__(self):
+        return self.name.title().replace('_', ' ')
+
+
+class HandRankingInfo:
+    def __init__(self, ranking, card_values):
+        self.ranking = ranking
+        self.card_values = card_values
+
+    def __str__(self):
+        readable_card_values = map(
+            lambda card_value: Card.get_value_name(card_value), self.card_values)
+        return '{}: {}'.format(str(self.ranking), ', '.join(readable_card_values))
+
+
 class Card:
     def __init__(self, card_id):
         self.id = card_id
@@ -17,6 +44,9 @@ class Card:
         value_id = card_id[0:len(card_id)-1]
         self.suit = Suit(suit_id)
         self.value = self.value_id_to_int(value_id)
+
+    def __str__(self):
+        return Card.get_card_name(self)
 
     def value_id_to_int(self, value_id):
         switcher = {
@@ -49,7 +79,7 @@ class Card:
 
     @staticmethod
     def get_suit_name(suit):
-        return str(suit.name.capitalize())
+        return suit.name.capitalize()
 
 
 class Hand:
@@ -64,11 +94,60 @@ class Hand:
         self.cards.sort(key=lambda card: card.value, reverse=True)
 
         # Print the cards' names
-        print(list(map(lambda card: Card.get_card_name(card), self.cards)))
+        print(list(map(lambda card: str(card), self.cards)))
 
-        self.has_groups_of_any_kind()
+        self.determine_ranking()
 
-    def has_groups_of_any_kind(self):
+    def determine_ranking(self):
+        card_groups = self.get_card_value_groups()
+
+        card_group_ranking = self.determine_ranking_for_groups(card_groups)
+        print(card_group_ranking)
+
+    def determine_ranking_for_groups(self, card_groups):
+        # Determine the number of unique values in this hand
+        # 0 means no card values appear more than once (no Pairs, Three of a Kind or Four of a Kind)
+        number_of_card_groups = len(card_groups)
+        if number_of_card_groups < 1:
+            return HandRankingInfo(Ranking.HIGH_CARD, self.cards[0].value)
+        else:
+            # Since we sorted the card groups by the number of cards they contain, the first card group is the biggest
+            biggest_group = card_groups[0]
+            biggest_group_count = biggest_group[1]
+
+            # Determine what kind of hand (group wise) we're dealing with
+            # Possibilities: One Pair, Two Pairs, Three of a Kind, Full House, Four of a Kind or none of those
+
+            # 1 means one card value appears more than once: One Pair, Three of a Kind or Four of a Kind
+            if number_of_card_groups == 1:
+                # Determine which kind of card group this hand has
+                if biggest_group_count == 2:
+                    ranking = Ranking.ONE_PAIR
+                    # print('One pair: {}'.format(
+                    #     Card.get_value_name(biggest_group[0])))
+                elif biggest_group_count == 3:
+                    ranking = Ranking.THREE_OF_A_KIND
+                    # print('Three of a kind: {}'.format(
+                    #     Card.get_value_name(biggest_group[0])))
+                else:
+                    ranking = Ranking.FOUR_OF_A_KIND
+                    # print('Four of a kind: {}'.format(
+                    #     Card.get_value_name(biggest_group[0])))
+                return HandRankingInfo(ranking, [biggest_group[0]])
+            # 2 means two card values appear more than once: Two Pairs or a Full House
+            else:
+                # Determine which kind of card groups this hand has
+                if biggest_group_count == 2:
+                    ranking = Ranking.TWO_PAIRS
+                    # print('Two pairs: {} and {}'.format(
+                    #     Card.get_value_name(card_groups[0][0]), Card.get_value_name(card_groups[1][0])))
+                elif biggest_group_count == 3:
+                    ranking = Ranking.FULL_HOUSE
+                    # print('Full House: {} (biggest group) and {} (smallest group)'.format(
+                    #     Card.get_value_name(card_groups[0][0]), Card.get_value_name(card_groups[1][0])))
+                return HandRankingInfo(ranking, [card_groups[0][0], card_groups[1][0]])
+
+    def get_card_value_groups(self):
         from itertools import groupby
 
         # User itertools to group the cards by their value (2 to 14)
@@ -87,46 +166,12 @@ class Hand:
                 # We want to know how many times a card value occurs, so I generate a tuple containing just that info ;)
                 card_group_tuple = (card_value, len(group_list))
                 cards_grouped_by_value.append(card_group_tuple)
-        print(cards_grouped_by_value)
 
         # Sort card groups by size (we want the biggest group first for a Full House)
         cards_grouped_by_value.sort(
             key=lambda card_group: card_group[1], reverse=True)
 
-        # Determine the number of unique values in this hand
-        # 0 means no card values appear more than once (no Pairs, Three of a Kind or Four of a Kind)
-        number_of_card_groups = len(cards_grouped_by_value)
-        if number_of_card_groups < 1:
-            return False
-        else:
-            # Since we sorted the card groups by the number of cards they contain, the first card group is the biggest
-            biggest_group = cards_grouped_by_value[0]
-            biggest_group_count = biggest_group[1]
-
-            # Determine what kind of hand (group wise) we're dealing with
-            # Possibilities: One Pair, Two Pairs, Three of a Kind, Full House, Four of a Kind or none of those
-
-            # 1 means one card value appears more than once: One Pair, Three of a Kind or Four of a Kind
-            if number_of_card_groups == 1:
-                # Determine which kind of card group this hand has
-                if biggest_group_count == 2:
-                    print('One pair: {}'.format(
-                        Card.get_value_name(biggest_group[0])))
-                elif biggest_group_count == 3:
-                    print('Three of a kind: {}'.format(
-                        Card.get_value_name(biggest_group[0])))
-                elif biggest_group_count == 4:
-                    print('Four of a kind: {}'.format(
-                        Card.get_value_name(biggest_group[0])))
-            # 2 means two card values appear more than once: Two Pairs or a Full House
-            else:
-                # Determine which kind of card groups this hand has
-                if biggest_group_count == 2:
-                    print('Two pairs: {} and {}'.format(
-                        Card.get_value_name(cards_grouped_by_value[0][0]), Card.get_value_name(cards_grouped_by_value[1][0])))
-                elif biggest_group_count == 3:
-                    print('Full House: {} (biggest group) and {} (smallest group)'.format(
-                        Card.get_value_name(cards_grouped_by_value[0][0]), Card.get_value_name(cards_grouped_by_value[1][0])))
+        return cards_grouped_by_value
 
 
 # Parses a line of ten cards separated by spaces into the hands for two players
