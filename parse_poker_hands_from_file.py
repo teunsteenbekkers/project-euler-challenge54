@@ -66,43 +66,41 @@ class Hand:
         # Print the cards' names
         print(list(map(lambda card: Card.get_card_name(card), self.cards)))
 
-        self.has_pair_of_any_kind()
+        self.has_groups_of_any_kind()
 
-    def has_pair_of_any_kind(self):
+    def has_groups_of_any_kind(self):
         from itertools import groupby
 
-        # User itertools to group the cards by their value (2 to Ace)
+        # User itertools to group the cards by their value (2 to 14)
         card_values = map(lambda card: card.value, self.cards)
-        cards_grouped_by_value = groupby(
-            iterable=card_values, key=lambda value: value)
+        cards_grouped_by_value = []
+        for card_value, group in groupby(
+                iterable=card_values, key=lambda value: value):
+            # Convert the group to a list (because it's an iterator, after this the group will be empty!)
+            group_list = list(group)
 
-        # Define the function used to map the cards grouped by value to tuples of the format (card_value, number_of_cards_in_group)
-        def map_function(data):
-            card_value, group_of_cards = data
-            number_of_cards_in_group = len(list(group_of_cards))
             # print("Number of cards with value of {}: {}".format(
-            #     card_value, number_of_cards_in_group))
-            return (card_value, number_of_cards_in_group)
+            #     card_value, len(group_list)))
 
-        # Map the grouped cards to tuples
-        number_of_cards_per_unique_value = list(map(
-            map_function, cards_grouped_by_value))
-
-        # Remove the tuples for card groups with only 1 card
-        card_groups = list(filter(
-            lambda group_of_cards: group_of_cards[1] > 1, number_of_cards_per_unique_value))
+            # We're only interested in the card values that occur more than once in this hand
+            if len(group_list) > 1:
+                # We want to know how many times a card value occurs, so I generate a tuple containing just that info ;)
+                card_group_tuple = (card_value, len(group_list))
+                cards_grouped_by_value.append(card_group_tuple)
+        print(cards_grouped_by_value)
 
         # Sort card groups by size (we want the biggest group first for a Full House)
-        card_groups.sort(key=lambda card_group: card_group[1], reverse=True)
+        cards_grouped_by_value.sort(
+            key=lambda card_group: card_group[1], reverse=True)
 
         # Determine the number of unique values in this hand
         # 0 means no card values appear more than once (no Pairs, Three of a Kind or Four of a Kind)
-        number_of_card_groups = len(card_groups)
+        number_of_card_groups = len(cards_grouped_by_value)
         if number_of_card_groups < 1:
             return False
         else:
             # Since we sorted the card groups by the number of cards they contain, the first card group is the biggest
-            biggest_group = card_groups[0]
+            biggest_group = cards_grouped_by_value[0]
             biggest_group_count = biggest_group[1]
 
             # Determine what kind of hand (group wise) we're dealing with
@@ -125,10 +123,10 @@ class Hand:
                 # Determine which kind of card groups this hand has
                 if biggest_group_count == 2:
                     print('Two pairs: {} and {}'.format(
-                        Card.get_value_name(card_groups[0][0]), Card.get_value_name(card_groups[1][0])))
+                        Card.get_value_name(cards_grouped_by_value[0][0]), Card.get_value_name(cards_grouped_by_value[1][0])))
                 elif biggest_group_count == 3:
                     print('Full House: {} (biggest group) and {} (smallest group)'.format(
-                        Card.get_value_name(card_groups[0][0]), Card.get_value_name(card_groups[1][0])))
+                        Card.get_value_name(cards_grouped_by_value[0][0]), Card.get_value_name(cards_grouped_by_value[1][0])))
 
 
 # Parses a line of ten cards separated by spaces into the hands for two players
