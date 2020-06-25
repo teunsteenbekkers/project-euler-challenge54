@@ -1,6 +1,7 @@
 # Define the classes we use
 from enum import Enum
 from pathlib import Path
+from functools import total_ordering
 
 
 class Suit(Enum):
@@ -10,22 +11,28 @@ class Suit(Enum):
     SPADES = 'S'
 
     def __str__(self):
+        # pylint: disable=no-member
         return self.name.title()
 
     def get_unicode_character(self):
         character = ''
         if(self.value == 'S'):
             character = '\u2660'
+            character = '♠️'
         elif(self.value == 'C'):
             character = '\u2663'
+            character = '♣️'
         elif(self.value == 'H'):
             character = '\u2665'
+            character = '♥️'
         elif(self.value == 'D'):
             character = '\u2666'
+            character = '♦️'
 
         return character
 
 
+@total_ordering
 class Ranking(Enum):
     HIGH_CARD = 1
     ONE_PAIR = 2
@@ -39,10 +46,17 @@ class Ranking(Enum):
     ROYAL_FLUSH = 10
 
     def __str__(self):
+        # pylint: disable=no-member
         return self.name.title().replace('_', ' ')
 
+    def __eq__(self, other):
+        return self.value == other.value
+
+    def __ne__(self, other):
+        return not (self == other)
+
     def __lt__(self, other):
-        return other.value > self.value
+        return self.value < other.value
 
 
 class Card:
@@ -87,6 +101,7 @@ class Card:
         return switcher.get(value, str(value))
 
 
+@total_ordering
 class Hand:
     def __init__(self, card_ids):
         self.cards = []
@@ -106,10 +121,74 @@ class Hand:
             list(map(lambda card: "\t{}".format(str(card)), self.cards)))
         return '{}\t({})'.format(cards_string, str(self.ranking))
 
+    def __eq__(self, other):
+        return self.ranking == other.ranking and self.get_card_values() == other.get_card_values()
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __lt__(self, other):
+        if other.ranking != self.ranking:
+            return self.ranking < other.ranking
+        else:
+            # If the hands have the same ranking it means the number of card groups (and their number of cards) are the same
+            card_groups = self.get_card_value_groups()
+            if(len(card_groups) == 0):
+                # No groups, so check the cards for both hands at every index for equality
+                for i in range(0, 5):
+                    self_value = self.cards[i].value
+                    other_value = other.cards[i].value
+                    if(self_value != other_value):
+                        return self_value < other_value
+                return False
+            elif len(card_groups) == 1:
+                # One Pair (Three of a Kind and Four of a Kind cannot be present twice for the same value)
+                self_pair_value = card_groups[0]
+                other_pair_value = self.get_card_value_groups()[0]
+
+                if self_pair_value != other_pair_value:
+                    return self_pair_value < other_pair_value
+                else:
+                    # Check the remaining cards
+                    for i in range(0, 5):
+                        self_value = self.cards[i].value
+                        other_value = other.cards[i].value
+                        print("{}: {} vs {}".format(
+                            i, self_value, other_value))
+                        if(self_value != other_value):
+                            return self_value < other_value
+                    return False
+                return False
+            elif len(card_groups) == 2:
+                # Two Pair (Full House cannot be present twice for the same value)
+                biggest_self_pair_value = card_groups[0]
+                biggest_other_pair_value = self.get_card_value_groups()[0]
+                smallest_self_pair_value = card_groups[1]
+                smallest_other_pair_value = self.get_card_value_groups()[1]
+
+                if biggest_self_pair_value != biggest_other_pair_value:
+                    return biggest_self_pair_value < biggest_other_pair_value
+                elif smallest_self_pair_value != smallest_other_pair_value:
+                    return smallest_self_pair_value < smallest_other_pair_value
+                else:
+                    print(self.get_card_values())
+                    print(other.get_card_values())
+                    # Check the remaining cards
+                    for i in range(0, 5):
+                        self_value = self.cards[i].value
+                        other_value = other.cards[i].value
+                        print("{}: {} vs {}".format(
+                            i, self_value, other_value))
+                        if(self_value != other_value):
+                            return self_value < other_value
+                    return False
+                return False
+            return False
+
     def determine_ranking(self):
         self.ranking = Hand.get_ranking(self)
 
-    @staticmethod
+    @ staticmethod
     def get_ranking(hand):
         ranking = Ranking.HIGH_CARD
 
@@ -145,7 +224,7 @@ class Hand:
                 biggest_group = card_groups[0]
                 biggest_group_count = len(biggest_group[1])
 
-                # Determine what kind of hand (group wise) we're dealing with
+                # Determine what kind of card group(s) we're dealing with
                 # Possibilities: One Pair, Two Pairs, Three of a Kind, Full House, Four of a Kind or none of those
 
                 # 1 means one card value appears more than once: One Pair, Three of a Kind or Four of a Kind
@@ -187,7 +266,7 @@ class Hand:
     def get_lowest_card_value(self):
         return self.get_card_values()[-1]
 
-    def get_card_value_groups(self):
+    def get_card_value_groups(self, include_groups_with_one_card=False):
         from itertools import groupby
 
         # User itertools to group the cards by their value (2 to 14)
@@ -196,11 +275,9 @@ class Hand:
                 iterable=self.cards, key=lambda card: card.value):
             # Convert the group to a list (because it's an iterator, after this the group will be empty!)
             group_list = list(group)
-            # print("Number of cards with value of {}: {}".format(
-            #     card_value, len(group_list)))
 
             # We're only interested in the card values that occur more than once in this hand
-            if len(group_list) > 1:
+            if include_groups_with_one_card or len(group_list) > 1:
                 # We want to know how many times a card value occurs, so I generate a tuple containing just that info ;)
                 card_group_tuple = (card_value, group_list)
                 cards_grouped_by_value.append(card_group_tuple)
@@ -212,21 +289,37 @@ class Hand:
         return cards_grouped_by_value
 
 
+def determine_winner(hands):
+    if all(hand == hands[0] for hand in hands):
+        return None
+    else:
+        return max(hands)
+
 # Parses a line of ten cards separated by spaces into the hands for two players
+
+
 def parse_player_hands_from_line(line):
     cards = line.split(' ')
-    player_one_cards = cards[0:5]
-    player_two_cards = cards[5:10]
-    player_one_hand = Hand(player_one_cards)
-    player_two_hand = Hand(player_two_cards)
-    print("\nPlayer 1 Hand: {}".format(str(player_one_hand)))
-    print("\nPlayer 2 Hand: {}".format(str(player_two_hand)))
+    # For every chunk of 5 cards (a player's hand)
+    chunk_size = 5
+    player_hands = []
+    player_number = 1
+    for i in range(0, len(cards), chunk_size):
+        player_hand = Hand(cards[i:i+chunk_size])
+        print("Player {} Hand: {}".format(
+            player_number, str(player_hand)))
+        player_hands.append(player_hand)
+        player_number += 1
+    # Determine the winner
+    winner = determine_winner(player_hands)
+    print("Winner: {}\n".format(winner))
 
 
 # Relative paths are always resolved from the current working directory
 # Therefore we need to resolve the text file's path using this file's path
 # file_path = './p054_poker_groups.txt'
-file_path = './p054_poker_suits.txt'
+# file_path = './p054_poker_suits.txt'
+file_path = './p054_poker_tiebreakers.txt'
 # file_path = './p054_poker.txt'
 base_path = Path(__file__).parent
 file_path = (base_path / file_path).resolve()
